@@ -1,0 +1,141 @@
+import gymnasium as gym
+import pygame
+import random
+import numpy as np
+from gymnasium import spaces
+from tetris import Piece, create_grid, get_shape, draw_window, clear_rows, valid_space, check_lost, \
+    convert_shape_format, draw_text_middle
+
+
+class TetrisEnv(gym.Env):
+    metadata = {'render.modes': ['human']}
+
+    def __init__(self):
+        super(TetrisEnv, self).__init__()
+
+        # 定义屏幕和游戏区的尺寸
+        self.screen_width = 300
+        self.screen_height = 600
+        self.play_width = 200
+        self.play_height = 400
+        self.block_size = 20
+
+        # 计算游戏区左上角的坐标
+        self.top_left_x = (self.screen_width - self.play_width) // 2
+        self.top_left_y = self.screen_height - self.play_height
+
+        # 定义动作空间：左、右、旋转、下
+        self.action_space = spaces.Discrete(4)
+        # 定义观测空间：屏幕的RGB图像
+        self.observation_space = spaces.Box(low=0, high=255, shape=(self.screen_height, self.screen_width, 3),
+                                            dtype=np.uint8)
+
+        self.reset()
+
+    def reset(self):
+        # 重置游戏状态
+        self.locked_positions = {}  # 存储已锁定方块的位置
+        self.grid = create_grid(self.locked_positions)  # 创建初始网格
+        self.current_piece = get_shape()  # 获取当前方块
+        self.next_piece = get_shape()  # 获取下一个方块
+        self.score = 0  # 初始化得分
+        self.change_piece = False  # 是否需要更换方块
+        self.run = True  # 游戏是否进行中
+        self.fall_time = 0  # 方块下落的时间
+        self.level_time = 0  # 游戏等级的时间
+        self.fall_speed = 0.27  # 初始下落速度
+        self.clock = pygame.time.Clock()  # 初始化时钟
+
+        # 创建游戏窗口
+        self.win = pygame.display.set_mode((self.screen_width, self.screen_height))
+        pygame.display.set_caption('Tetris')
+
+        # 调试信息
+        print("Initial piece position:", self.current_piece.x, self.current_piece.y)
+        print("Initial grid:")
+        for row in self.grid:
+            print(row)
+
+        return self.grid, {}
+
+    def step(self, action):
+        reward = 0
+        terminated = False
+        truncated = False
+
+        self.fall_time += self.clock.get_rawtime()
+        self.level_time += self.clock.get_rawtime()
+        self.clock.tick()
+
+        # 每经过5秒，增加游戏难度
+        if self.level_time / 1000 > 5:
+            self.level_time = 0
+            if self.fall_speed > 0.12:
+                self.fall_speed -= 0.005
+
+        # 方块下落逻辑
+        if self.fall_time / 1000 >= self.fall_speed:
+            self.fall_time = 0
+            self.current_piece.y += 1
+            if not valid_space(self.current_piece, self.grid) and self.current_piece.y > 0:
+                self.current_piece.y -= 1
+                self.change_piece = True
+
+        # 根据动作移动方块
+        if action == 0:  # 左
+            self.current_piece.x -= 1
+            if not valid_space(self.current_piece, self.grid):
+                self.current_piece.x += 1
+        elif action == 1:  # 右
+            self.current_piece.x += 1
+            if not valid_space(self.current_piece, self.grid):
+                self.current_piece.x -= 1
+        elif action == 2:  # 旋转
+            self.current_piece.rotation = (self.current_piece.rotation + 1) % len(self.current_piece.shape)
+            if not valid_space(self.current_piece, self.grid):
+                self.current_piece.rotation = (self.current_piece.rotation - 1) % len(self.current_piece.shape)
+        elif action == 3:  # 下
+            self.current_piece.y += 1
+            if not valid_space(self.current_piece, self.grid):
+                self.current_piece.y -= 1
+
+        # 获取方块的坐标位置
+        shape_pos = convert_shape_format(self.current_piece)
+
+        # 更新网格
+        for i in range(len(shape_pos)):
+            x, y = shape_pos[i]
+            if y > -1:
+                self.grid[y][x] = self.current_piece.color
+
+        # 检查是否需要更换方块
+        if self.change_piece:
+            for pos in shape_pos:
+                p = (pos[0], pos[1])
+                self.locked_positions[p] = self.current_piece.color
+            self.current_piece = self.next_piece
+            self.next_piece = get_shape()
+            self.change_piece = False
+            reward += clear_rows(self.grid, self.locked_positions) * 10
+
+        # 检查游戏是否结束
+        if check_lost(self.locked_positions):
+            self.run = False
+            reward -= 50
+            terminated = True
+
+        # 调试信息
+        print("Action:", action)
+        print("Current piece position:", self.current_piece.x, self.current_piece.y)
+        print("Grid after action:")
+        for row in self.grid:
+            print(row)
+
+        return self.grid, reward, terminated, truncated, {}
+
+    def render(self, mode='human'):
+        draw_window(self.win, self.grid, self.score)
+        pygame.display.update()
+
+    def close(self):
+        pygame.quit()
