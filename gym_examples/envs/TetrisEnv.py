@@ -1,16 +1,18 @@
+import time
+
 import gymnasium as gym
 import pygame
-import random
 import numpy as np
 from gymnasium import spaces
-from tetris import Piece, create_grid, get_shape, draw_window, clear_rows, valid_space, check_lost, \
-    convert_shape_format, draw_text_middle
+from tetris import Piece, create_grid, get_shape, draw_window, clear_rows, valid_space, check_lost, convert_shape_format
+from gymnasium.utils import seeding
+from typing import Tuple
 
 
 class TetrisEnv(gym.Env):
-    metadata = {'render.modes': ['human']}
+    metadata = {'render_modes': ['human', 'rgb_array']}
 
-    def __init__(self):
+    def __init__(self, render_mode=None):
         super(TetrisEnv, self).__init__()
 
         # 定义屏幕和游戏区的尺寸
@@ -30,9 +32,31 @@ class TetrisEnv(gym.Env):
         self.observation_space = spaces.Box(low=0, high=255, shape=(self.screen_height, self.screen_width, 3),
                                             dtype=np.uint8)
 
+        # 初始化实例属性
+        self.locked_positions = None
+        self.grid = None
+        self.current_piece = None
+        self.next_piece = None
+        self.score = None
+        self.change_piece = None
+        self.run = None
+        self.fall_time = None
+        self.level_time = None
+        self.fall_speed = None
+        self.clock = None
+        self.win = None
+        self.render_mode = render_mode
+
+        self.seed()
         self.reset()
 
-    def reset(self):
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
+
+    def reset(self, *, seed: int = None, options: dict = None) -> Tuple[np.ndarray, dict]:
+        super().reset(seed=seed)
+
         # 重置游戏状态
         self.locked_positions = {}  # 存储已锁定方块的位置
         self.grid = create_grid(self.locked_positions)  # 创建初始网格
@@ -47,14 +71,10 @@ class TetrisEnv(gym.Env):
         self.clock = pygame.time.Clock()  # 初始化时钟
 
         # 创建游戏窗口
-        self.win = pygame.display.set_mode((self.screen_width, self.screen_height))
-        pygame.display.set_caption('Tetris')
+        if self.win is None and self.render_mode == 'human':
+            self.win = pygame.display.set_mode((self.screen_width, self.screen_height))
+            pygame.display.set_caption('Tetris')
 
-        # 调试信息
-        print("Initial piece position:", self.current_piece.x, self.current_piece.y)
-        print("Initial grid:")
-        for row in self.grid:
-            print(row)
 
         return self.grid, {}
 
@@ -127,15 +147,36 @@ class TetrisEnv(gym.Env):
         # 调试信息
         print("Action:", action)
         print("Current piece position:", self.current_piece.x, self.current_piece.y)
-        print("Grid after action:")
-        for row in self.grid:
-            print(row)
+        print("------")
 
         return self.grid, reward, terminated, truncated, {}
 
-    def render(self, mode='human'):
-        draw_window(self.win, self.grid, self.score)
-        pygame.display.update()
+    def render(self):
+        if self.render_mode == 'human':
+            if self.win is None:
+                self.win = pygame.display.set_mode((self.screen_width, self.screen_height))
+                pygame.display.set_caption('Tetris')
+            draw_window(self.win, self.grid, self.score)
+            pygame.display.update()
+            time.sleep(1)
+        elif self.render_mode == 'rgb_array':
+            canvas = pygame.Surface((self.screen_width, self.screen_height))
+            draw_window(canvas, self.grid, self.score)
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
+            )
 
     def close(self):
         pygame.quit()
+
+
+if __name__ == "__main__":
+    env = TetrisEnv(render_mode='human')
+    done = False
+    while not done:
+        env.render()
+        action = env.action_space.sample()
+        state, reward, done, truncated, info = env.step(action)
+        if done or truncated:
+            print("Game over!")
+    env.close()
