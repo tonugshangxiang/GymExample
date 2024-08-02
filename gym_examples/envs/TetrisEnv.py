@@ -114,6 +114,10 @@ class TetrisEnv(gym.Env):
             self.current_piece.rotation = (self.current_piece.rotation + 1) % len(self.current_piece.shape)
             if not valid_space(self.current_piece, self.grid):
                 self.current_piece.rotation = (self.current_piece.rotation - 1) % len(self.current_piece.shape)
+            else:
+                # 打印旋转后的形状位置
+                shape_pos = convert_shape_format(self.current_piece)
+                print("Rotated shape positions:", shape_pos)
         elif action == 3:  # 下
             self.current_piece.y += 1
             if not valid_space(self.current_piece, self.grid):

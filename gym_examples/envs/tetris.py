@@ -155,16 +155,15 @@ def convert_shape_format(piece):
 
     return positions
 
-# 检查有效空间
 def valid_space(piece, grid):
-    accepted_positions = [[(j, i) for j in range(10) if grid[i][j] == (0, 0, 0)] for i in range(20)]
+    accepted_positions = [[(j, i) for j in range(len(grid[0])) if grid[i][j] == (0, 0, 0)] for i in range(len(grid))]
     accepted_positions = [j for sub in accepted_positions for j in sub]
 
     formatted = convert_shape_format(piece)
 
     for pos in formatted:
         if pos not in accepted_positions:
-            if pos[1] > -1:
+            if pos[1] >= 0:
                 return False
     return True
 
